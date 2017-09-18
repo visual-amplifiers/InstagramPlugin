@@ -67,11 +67,11 @@ static NSString *InstagramId = @"com.burbn.instagram";
         [imageObj writeToFile:path atomically:true];
         
         self.interactionController = [UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:path]];
-        self.interactionController .UTI = @"com.instagram.exclusivegram";
+        self.interactionController.UTI = @"com.instagram.exclusivegram";
         if (caption) {
-            self.interactionController .annotation = @{@"InstagramCaption" : caption};
+            self.interactionController.annotation = @{@"InstagramCaption" : caption};
         }
-        self.interactionController .delegate = self;
+        self.interactionController.delegate = self;
         [self.interactionController presentOpenInMenuFromRect:CGRectZero inView:self.webView animated:YES];
         
     } else {
@@ -97,10 +97,105 @@ static NSString *InstagramId = @"com.burbn.instagram";
 
 		result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
-        
+
     } else {
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:1];
         [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
+    }
+}
+
+- (void)shareUrl:(CDVInvokedUrlCommand*)command {
+    self.callbackId = command.callbackId;
+    self.toInstagram = FALSE;
+    NSString *mediaUrl = [command argumentAtIndex:0];
+
+    CDVPluginResult *result;
+
+    NSURL *instagramURL = [NSURL URLWithString:@"instagram://app"];
+    if ([[UIApplication sharedApplication] canOpenURL:instagramURL]) {
+        NSLog(@"open in instagram");
+
+        if ([mediaUrl isEqualToString:self.lastDownloadedMediaUrl]) {
+            NSString *tmpDir = NSTemporaryDirectory();
+            NSString *extension = [mediaUrl pathExtension];
+            if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"png"]) {
+                extension = @"igo";
+            }
+            NSString *fileName = [NSString stringWithFormat:@"instagram.%@", extension];
+            NSString *path = [tmpDir stringByAppendingPathComponent:fileName];
+            self.interactionController = [UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:path]];
+
+            if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"png"]) {
+                self.interactionController.UTI = @"com.instagram.exclusivegram";
+            } else {
+                self.interactionController.UTI = @"com.instagram.video";
+            }
+            self.interactionController.delegate = self;
+            [self.interactionController presentOpenInMenuFromRect:CGRectZero inView:self.webView animated:YES];
+
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+            [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
+        } else {
+            result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:1];
+            [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
+        }
+
+        // get image from URL
+        /*dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            NSLog(@"Loading %@", mediaUrl);
+            NSData *mediaData = [NSData dataWithContentsOfURL:[NSURL URLWithString:mediaUrl]];
+
+            if (mediaData) {
+                NSLog(@"Saving %@", mediaUrl);
+                NSString *tmpDir = NSTemporaryDirectory();
+                NSString *extension = [mediaUrl pathExtension];
+                if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"png"]) {
+                    extension = @"igo";
+                }
+                NSString *fileName = [NSString stringWithFormat:@"instagram.%@", extension];
+                NSString *path = [tmpDir stringByAppendingPathComponent:fileName];
+
+                [mediaData writeToFile:path atomically:true];
+
+                if (progressCallbackName) {
+                    [self.webView stringByEvaluatingJavaScriptFromString:[NSString stringWithFormat:@"%@(%@);", progressCallbackName, "1"]];
+                }
+
+                self.interactionController = [UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:path]];
+
+                if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"png"]) {
+                    self.interactionController.UTI = @"com.instagram.exclusivegram";
+                } else {
+                    self.interactionController.UTI = @"com.instagram.video";
+                }
+                self.interactionController.delegate = self;
+                [self.interactionController presentOpenInMenuFromRect:CGRectZero inView:self.webView animated:YES];
+            }
+        });*/
+
+    } else {
+        result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:1];
+        [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
+    }
+}
+
+- (void)downloadFromUrl:(CDVInvokedUrlCommand*)command {
+    self.downloadProgressCallbackId = command.callbackId;
+    NSString *mediaUrl = [command argumentAtIndex:0];
+    self.downloadProgressCallbackName = [command argumentAtIndex:1];
+
+    CDVPluginResult *result;
+
+    NSURL *instagramURL = [NSURL URLWithString:@"instagram://app"];
+    if ([[UIApplication sharedApplication] canOpenURL:instagramURL]) {
+        NSLog(@"Download from URL");
+
+        NSURL *url = [NSURL URLWithString:mediaUrl];
+        NSURLRequest *request = [NSURLRequest requestWithURL:url];
+        NSURLConnection *connection = [[NSURLConnection alloc] initWithRequest:request delegate:self startImmediately:YES];
+    } else {
+        result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:1];
+        [self.commandDelegate sendPluginResult:result callbackId: self.downloadProgressCallbackId];
     }
 }
 
@@ -120,6 +215,71 @@ static NSString *InstagramId = @"com.burbn.instagram";
         result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:2];
         [self.commandDelegate sendPluginResult:result callbackId: self.callbackId];
     }
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)urlResponse {
+    NSLog(@"Loading %@", [connection currentRequest]);
+
+    NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *) urlResponse;
+    NSDictionary *dict = httpResponse.allHeaderFields;
+    NSString *lengthString = [dict valueForKey:@"Content-Length"];
+    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    NSNumber *length = [formatter numberFromString:lengthString];
+    self.totalBytes = length.unsignedIntegerValue;
+
+    self.mediaData = [[NSMutableData alloc] initWithCapacity:self.totalBytes];
+
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data {
+    [self.mediaData appendData:data];
+    self.receivedBytes += data.length;
+
+    NSLog(@"Loading %lu / %lu", (unsigned long)self.receivedBytes, (unsigned long)self.totalBytes);
+
+    if (self.downloadProgressCallbackName) {
+        if ([self.webView isKindOfClass:[UIWebView class]]) {
+            NSString *mediaUrl = [[[connection currentRequest] URL] absoluteString];
+            NSString *jsString = [NSString stringWithFormat:@"%@('%@', %lu, %lu);", self.downloadProgressCallbackName, mediaUrl, self.receivedBytes, self.totalBytes];
+            NSLog(@"Calling %@", jsString);
+            [(UIWebView*)self.webView stringByEvaluatingJavaScriptFromString:jsString];
+        }
+    }
+
+}
+
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
+    NSLog(@"Finished loading %@", [connection currentRequest]);
+
+    CDVPluginResult *result;
+    NSString *mediaUrl = [[[connection currentRequest] URL] absoluteString];
+    self.lastDownloadedMediaUrl = [[[connection currentRequest] URL] absoluteString];
+    NSData *mediaData = [NSData dataWithData:self.mediaData];
+
+    if (mediaData) {
+        NSLog(@"Saving media locally");
+        NSString *tmpDir = NSTemporaryDirectory();
+        NSString *extension = [mediaUrl pathExtension];
+        if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"png"]) {
+            extension = @"igo";
+        }
+        NSString *fileName = [NSString stringWithFormat:@"instagram.%@", extension];
+        NSString *path = [tmpDir stringByAppendingPathComponent:fileName];
+
+        [mediaData writeToFile:path atomically:true];
+
+        result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
+        [self.commandDelegate sendPluginResult:result callbackId: self.downloadProgressCallbackId];
+    } else {
+        result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:2];
+        [self.commandDelegate sendPluginResult:result callbackId: self.downloadProgressCallbackId];
+    }
+}
+
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error {
+    NSLog(@"Error loading %@", [connection currentRequest]);
+    CDVPluginResult *result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageToErrorObject:2];
+    [self.commandDelegate sendPluginResult:result callbackId: self.downloadProgressCallbackId];
 }
 
 @end

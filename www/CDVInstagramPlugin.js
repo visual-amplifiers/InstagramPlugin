@@ -27,41 +27,39 @@ var exec = require('cordova/exec');
 var hasCheckedInstall,
     isAppInstalled;
 
-function shareDataUrl(dataUrl, caption, successCallback, errorCallback) {
-  if(typeof caption == 'Function') {
-      errorCallback = successCallback;
-      successCallback = caption;
-      caption = '';
-  }
+function shareDataUrl(dataUrl, caption, callback) {
   var imageData = dataUrl.replace(/data:image\/(png|jpeg);base64,/, "");
 
-  exec(function () {
-    if (cordova && cordova.plugins && cordova.plugins.clipboard && caption !== '') {
-      cordova.plugins.clipboard.copy(caption);
-    }
+  if (cordova && cordova.plugins && cordova.plugins.clipboard && caption !== '') {
+    console.log("copying caption: ", caption);
+    cordova.plugins.clipboard.copy(caption);
+  }
 
-    successCallback && successCallback();
-  },
-
-  function (err) {
-    errorCallback && errorCallback(err);
-  }, "Instagram", "share", [imageData, caption]);
+  exec(
+    function () {
+      callback && callback(null, true);
+    },
+    function (err) {
+      callback && callback(err);
+    }, "Instagram", "share", [imageData, caption]
+  );
 }
 
 var Plugin = {
   // calls to see if the device has the Instagram app
   isInstalled: function (callback) {
-    exec(function (version) {
-      hasCheckedInstall = true;
-      isAppInstalled = true;
-      callback && callback(true, version);
-    },
-
-    function () {
-      hasCheckedInstall = true;
-      isAppInstalled = false;
-      callback && callback(false);
-    }, "Instagram", "isInstalled", []);
+    exec(
+      function (version) {
+        hasCheckedInstall = true;
+        isAppInstalled = true;
+        callback && callback(null, version ? version : true);
+      },
+      function () {
+        hasCheckedInstall = true;
+        isAppInstalled = false;
+        callback && callback(null, false);
+      }, "Instagram", "isInstalled", []
+    );
   },
   share: function () {
     var data,
@@ -103,13 +101,31 @@ var Plugin = {
     }
   },
   shareAsset: function (successCallback, errorCallback, assetLocalIdentifier) {
-      // sanity check
-      if (hasCheckedInstall && !isAppInstalled) {
-          console.log("oops, Instagram is not installed ... ");
-          return errorCallback && errorCallback("oops, Instagram is not installed ... ");
-      }
-      exec(successCallback, errorCallback, "Instagram", "shareAsset", [assetLocalIdentifier]);
+    // sanity check
+    if (hasCheckedInstall && !isAppInstalled) {
+      console.log("oops, Instagram is not installed ... ");
+      return errorCallback && errorCallback("oops, Instagram is not installed ... ");
+    }
+    exec(successCallback, errorCallback, "Instagram", "shareAsset", [assetLocalIdentifier]);
+  },
+  shareUrl: function (url, successCallback, errorCallback) {
+    // sanity check
+    if (hasCheckedInstall && !isAppInstalled) {
+      console.log("oops, Instagram is not installed ... ");
+      return errorCallback && errorCallback("oops, Instagram is not installed ... ");
+    }
+    exec(successCallback, errorCallback, "Instagram", "shareUrl", [url]);
+  },
+  downloadFromUrl: function (url, successCallback, errorCallback, progressCallbackName) {
+    // sanity check
+    if (hasCheckedInstall && !isAppInstalled) {
+      console.log("oops, Instagram is not installed ... ");
+      return errorCallback && errorCallback("oops, Instagram is not installed ... ");
+    }
+    exec(successCallback, errorCallback, "Instagram", "downloadFromUrl", [url, progressCallbackName]);
   }
+
 };
+
 
 module.exports = Plugin;

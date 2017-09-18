@@ -26,14 +26,22 @@
 
 #import <Cordova/CDVPlugin.h>
 
-@interface CDVInstagramPlugin : CDVPlugin <UIDocumentInteractionControllerDelegate> {}
+@interface CDVInstagramPlugin : CDVPlugin <UIDocumentInteractionControllerDelegate, NSURLConnectionDataDelegate> {}
 
 @property (nonatomic) Boolean toInstagram;
 @property (nonatomic, strong) IBOutlet NSString *callbackId;
 @property (nonatomic) UIDocumentInteractionController *interactionController;
+@property (nonatomic) NSMutableData *mediaData;
+@property (nonatomic) NSUInteger totalBytes;
+@property (nonatomic) NSUInteger receivedBytes;
+@property (nonatomic, strong) IBOutlet NSString *downloadProgressCallbackId;
+@property (nonatomic) NSString *downloadProgressCallbackName;
+@property (nonatomic) NSString *lastDownloadedMediaUrl;
 
 - (void)isInstalled:(CDVInvokedUrlCommand*)command;
 - (void)share:(CDVInvokedUrlCommand*)command;
 - (void)shareAsset:(CDVInvokedUrlCommand*)command;
+- (void)shareUrl:(CDVInvokedUrlCommand*)command;
+- (void)downloadFromUrl:(CDVInvokedUrlCommand*)command;
 
 @end
